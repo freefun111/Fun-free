@@ -1,1 +1,268 @@
 
+'use server';
+
+/**
+ * @fileOverview This file defines the AI job matching flow.
+ *
+ * It uses Genkit to create a flow that takes a job seeker's profile and preferences
+ * and returns a list of job listings that are most relevant to them.
+ *
+ * @exports {
+ *   matchJobs,
+ *   MatchJobsInput,
+ *   MatchJobsOutput,
+ * }
+ */
+
+import {ai} from '@/ai/genkit';
+import {z} from 'genkit';
+
+const JobSeekerProfileSchema = z.object({
+  keywords: z.string().describe('Keywords for the job search, like profession, skills, or services'),
+  wilaya: z.string().optional().describe('The desired state (wilaya) in Algeria'),
+  salary: z.string().optional().describe('The desired salary, if specified'),
+  benefits: z.object({
+    accommodation: z.boolean().describe('If accommodation is desired'),
+    meals: z.boolean().describe('If meals are desired'),
+    transport: z.boolean().describe('If transport is desired'),
+  }).describe('Desired benefits'),
+});
+
+export type MatchJobsInput = z.infer<typeof JobSeekerProfileSchema>;
+
+const JobListingSchema = z.object({
+  title: z.string().describe('Job title'),
+  company: z.string().describe('Company name'),
+  location: z.string().describe('Job location'),
+  description: z.string().describe('Job description'),
+  category: z.string().describe('Job category'),
+  salary: z.string().describe('Salary range'),
+});
+
+const MatchJobsOutputSchema = z.array(JobListingSchema).describe('List of relevant job listings');
+
+export type MatchJobsOutput = z.infer<typeof MatchJobsOutputSchema>;
+
+export async function matchJobs(input: MatchJobsInput): Promise<MatchJobsOutput> {
+  return matchJobsFlow(input);
+}
+
+const prompt = ai.definePrompt({
+  name: 'matchJobsPrompt',
+  input: {schema: JobSeekerProfileSchema},
+  output: {schema: MatchJobsOutputSchema},
+  prompt: `You are an AI job matching expert. Given the following job seeker profile and preferences, find the most relevant job listings from the list provided. ONLY return the job listings in JSON format, do NOT return any other text.
+
+Job Seeker Profile:
+Keywords: {{keywords}}
+{{#if wilaya}}Location (Wilaya): {{wilaya}}{{/if}}
+{{#if salary}}Desired Salary: {{salary}}{{/if}}
+Desired Benefits: {{#if benefits.accommodation}}Accommodation {{/if}}{{#if benefits.meals}}Meals {{/if}}{{#if benefits.transport}}Transport{{/if}}
+
+Job Listings:
+{
+  "title": "Laravel Expert Developer",
+  "company": "Benaa Aljazair",
+  "location": "Constantine",
+  "description": "We are looking for an expert software developer for a remote project.",
+  "category": "Software",
+  "salary": "75,000 - 120,000 DZD"
+},
+{
+  "title": "Industrial Electrician",
+  "company": "Maintenance and Co",
+  "location": "Setif",
+  "description": "We are looking for a maintenance technician for high voltage panels.",
+  "category": "Maintenance",
+  "salary": "Contact for Price"
+},
+{
+  "title": "Delivery Driver",
+  "company": "eCommerce Middle Mile",
+  "location": "Oran",
+  "description": "We are looking for reliable drivers with their own trucks.",
+  "category": "Logistics",
+  "salary": "4,000 DZD / day"
+},
+{
+  "title": "UI/UX Designer",
+  "company": "Digital Creations",
+  "location": "Algiers",
+  "description": "Creative UI/UX designer needed for a mobile app project. Experience with Figma is a must.",
+  "category": "Design",
+  "salary": "90,000 DZD"
+},
+{
+  "title": "English Teacher",
+  "company": "Global Language School",
+  "location": "Blida",
+  "description": "Certified English teacher for primary and secondary levels. Part-time.",
+  "category": "Education",
+  "salary": "50,000 DZD"
+},
+{
+  "title": "Registered Nurse",
+  "company": "Al-Shifa Clinic",
+  "location": "Annaba",
+  "description": "Experienced registered nurse for our cardiology department. Night shifts required.",
+  "category": "Healthcare",
+  "salary": "85,000 DZD"
+},
+{
+  "title": "Digital Marketing Specialist",
+  "company": "WebGrow Agency",
+  "location": "Remote",
+  "description": "Looking for a digital marketing specialist with experience in SEO, SEM, and social media campaigns.",
+  "category": "Marketing",
+  "salary": "110,000 DZD"
+},
+{
+  "title": "Civil Engineer",
+  "company": "Urban Builders",
+  "location": "Algiers",
+  "description": "Seeking a qualified civil engineer for infrastructure projects. Minimum 5 years experience.",
+  "category": "Civil Engineering",
+  "salary": "150,000 DZD"
+},
+{
+  "title": "Plumber",
+  "company": "Pro Plumb",
+  "location": "Oran",
+  "description": "Experienced plumber needed for residential and commercial installations and repairs.",
+  "category": "Plumbing",
+  "salary": "60,000 DZD"
+},
+{
+  "title": "Carpenter",
+  "company": "Wood Works",
+  "location": "Constantine",
+  "description": "Skilled carpenter for custom furniture and fittings. Must be proficient with all standard tools.",
+  "category": "Carpentry",
+  "salary": "70,000 DZD"
+},
+{
+  "title": "Accountant",
+  "company": "Finance Experts",
+  "location": "Algiers",
+  "description": "Certified accountant to manage company financial records, including bookkeeping and tax preparation.",
+  "category": "Accounting",
+  "salary": "95,000 DZD"
+},
+{
+  "title": "Sales Representative",
+  "company": "Algeria Distribution",
+  "location": "Setif",
+  "description": "Dynamic sales representative to manage client accounts and generate new sales leads.",
+  "category": "Sales",
+  "salary": "80,000 DZD + Commission"
+},
+{
+  "title": "Customer Service Agent",
+  "company": "Connecta Telecom",
+  "location": "Blida",
+  "description": "Friendly customer service agent to handle inquiries and resolve issues via phone and email.",
+  "category": "Customer Service",
+  "salary": "55,000 DZD"
+},
+{
+  "title": "Hotel Receptionist",
+  "company": "Grand Hotel Tizi",
+  "location": "Tizi Ouzou",
+  "description": "Welcoming receptionist for our front desk. Must be fluent in Arabic, French, and English.",
+  "category": "Hospitality",
+  "salary": "65,000 DZD"
+},
+{
+  "title": "Security Guard",
+  "company": "SecureCorp",
+  "location": "Algiers",
+  "description": "Vigilant security guard for overnight shifts at a commercial property. Previous experience required.",
+  "category": "Security",
+  "salary": "45,000 DZD"
+},
+{
+  "title": "Cleaning Staff",
+  "company": "Clean Sweep Inc.",
+  "location": "Oran",
+  "description": "Reliable cleaning staff for office buildings. Part-time and full-time positions available.",
+  "category": "Cleaning",
+  "salary": "35,000 DZD"
+},
+{
+  "title": "Auto Mechanic",
+  "company": "Mecanique Rapide",
+  "location": "Mostaganem",
+  "description": "Certified auto mechanic for diagnostics and repairs on a wide range of vehicles.",
+  "category": "Mechanics",
+  "salary": "75,000 DZD"
+},
+{
+  "title": "طباخ محترف",
+  "company": "مطعم الذواقة",
+  "location": "الجزائر العاصمة",
+  "description": "مطلوب طباخ بخبرة في المطبخ الجزائري والعالمي للعمل في مطعم راقي.",
+  "category": "ضيافة",
+  "salary": "80,000 دج"
+},
+{
+  "title": "مصمم جرافيك",
+  "company": "إبداع ديجيتال",
+  "location": "عنابة",
+  "description": "نبحث عن مصمم جرافيك مبدع لإنشاء تصاميم للسوشيال ميديا والمواد التسويقية.",
+  "category": "تصميم",
+  "salary": "75,000 دج"
+},
+{
+  "title": "نادل مطعم",
+  "company": "فندق الواحة",
+  "location": "تمنراست",
+  "description": "مطلوب نادل حسن المظهر ولبق للعمل في مطعم فندق سياحي.",
+  "category": "ضيافة",
+  "salary": "45,000 دج + تبس"
+},
+{
+  "title": "مساعد صيدلي",
+  "company": "صيدلية الشفاء",
+  "location": "وهران",
+  "description": "مطلوب مساعد صيدلي بخبرة لتقديم المساعدة في تنظيم الأدوية وخدمة العملاء.",
+  "category": "رعاية صحية",
+  "salary": "60,000 دج"
+},
+{
+  "title": "مدير وسائل التواصل الاجتماعي",
+  "company": "وكالة تسويق أونلاين",
+  "location": "عن بعد",
+  "description": "نبحث عن مدير وسائل تواصل اجتماعي لإدارة حسابات عملائنا وتطوير استراتيجيات المحتوى.",
+  "category": "تسويق",
+  "salary": "90,000 دج"
+},
+{
+  "title": "دهان منازل",
+  "company": "مقاولات التزيين الحديث",
+  "location": "قسنطينة",
+  "description": "مطلوب دهان محترف بخبرة في جميع أنواع الدهانات الداخلية والخارجية.",
+  "category": "بناء",
+  "salary": "حسب المشروع"
+},
+{
+  "title": "أستاذ دروس خصوصية",
+  "company": "مستقل",
+  "location": "سطيف",
+  "description": "أستاذ رياضيات وفيزياء يقدم دروس دعم لطلاب الطور الثانوي.",
+  "category": "تعليم",
+  "salary": "2000 دج/ساعة"
+}
+`,
+});
+
+const matchJobsFlow = ai.defineFlow(
+  {
+    name: 'matchJobsFlow',
+    inputSchema: JobSeekerProfileSchema,
+    outputSchema: MatchJobsOutputSchema,
+  },
+  async input => {
+    const {output} = await prompt(input);
+    return output!;
+  }
+);
